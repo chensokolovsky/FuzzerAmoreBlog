@@ -1,0 +1,156 @@
+<link rel="stylesheet" href="../styles/style2.css">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&family=VT323&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600&family=VT323&display=swap" rel="stylesheet">
+
+<head>
+  <link rel="icon" href="../images/FuzzerAmoreLogoDark.png" type="image/png">
+</head>
+
+<body>
+<div class="content">
+
+<nav>
+    <img src="../images/FuzzerAmoreLogoLight.png" alt="FuzzerAmoreLogo" style="width: 100px; height: 100px; object-fit: contain; vertical-align: middle;">
+    <a href="../home.html">Home</a>
+    <a href="../posts.html" class="active">Posts</a>
+    <a href="../about.html">About</a>
+</nav>
+
+
+
+<pre class="ascii">
+____|                                    \                                 
+|    |   | _  / _  /   _ \   __|        _ \    __ `__ \    _ \    __|  _ \ 
+__|  |   |   /    /    __/  |          ___ \   |   |   |  (   |  |     __/ 
+_|   \__,_| ___| ___| \___| _|        _/    _\ _|  _|  _| \___/  _|   \___| 
+                                                                                    
+</pre>
+</div>
+<div class="content">
+
+<a href="../posts.html"> <- Back</a>
+
+<h1 id="general">Docker iOS Research Environment</h1>
+<img src="../images/env_pretty.png" alt="env_diagram" style="max-width: 770px">
+
+
+<h2 id="Introduction">Introduction</h2>
+<p>Hello,</p>
+<p>In this (first) post I will be presenting a <a href="https://github.com/chensokolovsky/iosEnv">project</a> I started in late 2024.<br />
+I was about to switch jobs, and I wanted my research environment (macOS)
+to be portable so I could quickly set it up once I got my new (macOS) laptop.</p>
+<p>This gave birth to the idea of dockerizing my environment, scripts,
+and tools, uploading everything to GitHub, and then simply pull and build it on my next machine.</p>
+<p>It took a couple of weeks of working nights, but eventually it
+worked. I have also improved it since, and added scripts, features,
+configurations, and improved portability.</p>
+<p>Ideally I would have shared the entire thing, including my scripts
+and tools, but licensing made that complex, so I’m sharing only the
+ environment-setup files, and instructions on how to add your own
+scripts</p>
+<h2 id="From-docker-to-scripts">From docker to scripts</h2>
+<p>My naive approach was to create a Dockerfile that installs SSH, Frida, and LLDB, add it to a repo 
+  that contains some scripts, and port it across
+machines.</p>
+<p>If that is the case, I may as well set up a <smallcode>.lldbinit</smallcode> file that will
+load my scripts, right? Also, getting the PID of my target and attaching
+to the process could save the time of constantly copying and pasting Bash/LLDB commands. 
+And since I am scripting things, it would be a
+hassle of keep entering my device password whenever I SSH. And what if I
+want to switch to Frida? I also don’t want to mix the scripts from my work
+ projects in my personal environment repo…</p>
+<p>So, ideally, I wanted all of these to work: a container that is portable,
+configurable, minimal, easy to use, separates the environment from my projects, 
+as automatic and as scriptable as possible,
+and flexible in case I want to switch tools, scripts, and projects. And
+after making it work, share it with the world (or at least with you, in
+case you are still reading)</p>
+<h2 id="problems-along-the-way">Problems along the way</h2>
+<p><em>USB</em> - a container is not able to recognize a device that is
+connected via USB (at least from my research on a Mac). I needed some
+other solution, which was combining iProxy with network-based communication 
+(i.e., Frida and LLDB remote-server style) and port sharing
+and forwarding between the container, host, iproxy, and the device</p>
+<p><em>Password prompts</em> - whenever ssh-ing into the device a
+password is requested. Running scripts to, for example, find the PID of
+the target needs to be seamless. This was possible by sharing SSH key pairs 
+and known-hosts entries between the device and the container. The location of
+the keys is outside of the repo and is configurable. See the docs for
+ssh setup.</p>
+<p><em>iOS symbols</em> - In a regular LLDB client, the debugger looks
+for the symbols in Xcode subfolders (after selecting the platform to 
+remote-ios). However, inside the Docker container we use a Linux build,
+which does not search for that path. While LLDB has many configuration
+options and environment variables, the debug symbols is not one of them (at
+least with the version I was working with). This required patching one
+of LLDB libraries to look for the symbols in that path, while mounting
+the host Xcode's path to the container’s fake Xcode path. The fun part
+about solving this was debugging LLDB with LLDB. Good times.</p>
+<p><em>Ports</em> - Since I wanted a script the “does it all”, including
+setting up the ports, iproxy, and connecting to the device, I had to
+make sure to kill all the previous connections that were using these
+ports (from a previous run, for example). This required running netstat
+to find the PID that uses the ports, killing them, setting iproxy,
+using socat for packet forwarding, and everything should be done 3 times
+- one set of ports for ssh, one for LLDB and one for frida.</p>
+<p><em>root/rootless</em> - When cloning the repo to the new machine for
+the first time, I was also working with a newer device and the concept
+of rootless Jailbreak. This required some more configuration fields like
+<smallcode>$SSH_USER</smallcode> which switched from <smallcode>root</smallcode> to
+<smallcode>mobile</smallcode>. Also, the location of the debugserver on the device
+changed from <smallcode>/usr/bin/debugserver</smallcode> to
+<smallcode>/var/tmp/debugserver</smallcode> which was implemented as
+<smallcode>$DEBUGSERVER_PATH</smallcode> in the run.cfg file</p>
+<h2 id="Teasers">Teasers</h2>
+<p>This section contains examples of what using this setup looks like once 
+  everything is configured.</p>
+<h3 id="Example-1">Example 1</h3>
+<p>Running</p>
+<pre><code>host$ ./build_and_run_docker
+docker# ./debug</code></pre>
+<br>
+<p>The first line performs the following:<br />
+<br>
+- imports your configuration<br />
+- sets up the host ports, packet forwarding, and iproxy<br />
+- builds the container<br />
+- runs the container and mounting the project and scripts folders<br />
+- copies your ssh keys into the container<br />
+- sets up the patched lldb<br />
+- creates convenient aliases inside the container<br />
+<br>
+The second line performs the following:<br />
+<br>
+- imports your project and target-specific configuration<br />
+- finds the PID of your target using ssh (or waitfor)<br />
+- starts the configured tool (lldb/frida/frida-python)<br />
+- connecta to/spawns the process<br />
+- loads your custom generic scripts<br />
+- loads your target-specific script, which may start setting up hooks,
+breakpoints, automatically and continue running</p>
+<h3 id="Example-2">Example 2</h3>
+<p>Running</p>
+<pre><code>host$ ./build_and_run_docker
+docker# myssh</code></pre>
+<p>The first line performs the above.<br />
+The second line connects to your
+device right away (saving you from running iproxy, ssh params, password, known hosts
+prompt)</p>
+<h3 id="Example-3">Example 3</h3>
+<p>Running <smallcode># myfrida [pid]</smallcode> connects to frida cli (saving you
+iproxy, frida params, password, etc)</p>
+<h2 id="how-to-get-started">How to get started?</h2>
+<p>First, clone the <a
+href="https://github.com/chensokolovsky/iosEnv.git">repo</a> and read
+the README. Start with a simple task such as getting <smallcode>myssh</smallcode> 
+or <smallcode>myfrida</smallcode> working by configuring the ports in <smallcode>config.cfg</smallcode>. 
+Then, move on to more complex examples like
+lldb/frida connection. Use the examples folder in the repo<br />
+Use the extra
+guides in the docs of the repo</p>
+
+
+
+</div>
+</body>

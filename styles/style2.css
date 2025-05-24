@@ -1,0 +1,127 @@
+/* Inspired by highaltitudehacks.com */
+
+body {
+  margin: 0;
+  padding: 2em;
+  font-family:  'Segoe UI' , monospace;
+  background-color: #e5f7fbd8;
+  color: #0a8399;
+  line-height: 1.5;
+  max-width: 800px;
+  margin: auto;
+}
+
+.content {
+  max-width: 800px;
+  margin: 1em auto;
+  background-color: #fffeffd8; /* content background */
+  padding: 1em;
+  box-shadow: 0 0 10px rgba(230, 34, 34, 0.1); /* optional */
+  /*min-height: 100vh;*/
+}
+
+.asciicontent {
+  max-width: 800px;
+  margin: 1em auto;
+  background-color: #fffeffd8; /* content background */
+  padding: 1em;
+  box-shadow: 0 0 10px rgba(230, 34, 34, 0.1); /* optional */
+  /*min-height: 100vh;*/
+}
+
+.ascii {
+  max-width: 800px;
+  background-color: #000000d8; /* content background */
+  color: #00d9ff;
+  box-shadow: 0 0 10px rgba(230, 34, 34, 0.1); /* optional */
+  /*min-height: 100vh;*/
+  font-family: monospace;
+  white-space: pre;
+  margin-top: 0.5em;
+  /*background: transparent;*/
+  /*color: #abb0b3;*/
+}
+
+
+h1, h2, h3 {
+  color: #0265b7;
+  font-family: 'Playfair Display', serif;
+  border-bottom: 1px solid #444;
+  padding-bottom: 0.3em;
+  margin-top: 2em;
+  text-align: left;
+}
+
+a {
+  color: #4FC3F7;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+code, pre {
+  background-color: #000000;
+  color: #00f7ff;
+  padding: 0.5em;
+  border-radius: 4px;
+  font-family: monospace;
+  overflow-x: auto;
+  display: block;
+  white-space: pre-wrap;
+  text-align: left;
+}
+
+smallcode {
+  white-space: nowrap;
+  font-family: monospace;
+  color: #4f099f;
+  padding: 0.5em;
+  border-radius: 2px;
+  overflow-x: auto;
+  text-align: left;
+}
+
+pre {
+  margin: 1em 0;
+}
+
+ul, ol {
+  padding-left: 1.5em;
+}
+
+blockquote {
+  border-left: 4px solid #4FC3F7;
+  padding-left: 1em;
+  color: #aaa;
+  font-style: italic;
+}
+
+nav {
+  padding: 1em;
+}
+
+nav a {
+  text-decoration: none;
+  margin: 0 1em; /* more space between items */
+  font-weight: bold;
+  display: inline-block;
+}
+
+
+nav a.active {
+  color: #2851f3;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid #444;
+  margin: 2em 0;
+}
+
+
+pre {
+  font-size: 1rem;
+  text-align: center;
+  margin-top: 2em;
+}
