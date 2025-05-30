@@ -125,9 +125,9 @@ docker# ./debug</code></pre>
 The second line performs the following:<br />
 <br>
 - imports your project and target-specific configuration<br />
-- finds the PID of your target using ssh (or waitfor)<br />
+- finds the PID of your target using ssh (or waitfor by process name)<br />
 - starts the configured tool (lldb/frida/frida-python)<br />
-- connecta to/spawns the process<br />
+- connects to/spawns the process<br />
 - loads your custom generic scripts<br />
 - loads your target-specific script, which may start setting up hooks,
 breakpoints, automatically and continue running</p>
