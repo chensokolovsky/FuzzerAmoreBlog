@@ -31,7 +31,228 @@ _|   \__,_| ___| ___| \___| _|        _/    _\ _|  _|  _| \___/  _|   \___|
 
 <a href="../posts.html"> <- Back</a>
 
+<br>June 8, 2025<br>
 <h2 id="general">Fuzzer Amore - iOS fuzzer</h2>
-<p>Coming Soon</p>
+<img src="../images/FuzzerAmoreMainDiagram.png" alt="Fuzzer_amore_diagram" style="max-width: 770px">
+
+
+<h2 id="Introduction">Introduction</h2>
+<p>Hello,</p>
+<p>In this second post I will be presenting <a href="https://github.com/chensokolovsky/FuzzerAmore">Fuzzer Amore</a> - an iOS-on-device<br />
+fuzzing setup that connects an AFL++ fuzzer running on the Mac to a harness on the iOS device without the need of a jailbroken device.
+This limits fuzzing to code executed within your process, but includes the ability to fuzz user-space OS libraries or other imported libraries,
+ and can run on the latest iOS version</p>
+<p>This project does not rely on the <a href="./ios_research_docker_env.html">iosEnv</a> setup, yet, since this setup uses containers, 
+some of the concepts are similar. Read the post if you haven't, or if you want to learn more about the port forwarding, iproxy usage,
+ and lldb patch that are used in this project.</p>
+
+
+<h2 id="fpicker">fpicker</h2>
+<p>As an iOS researcher, a field in which information is not common on the public domain, and literature is somewhat narrow compared to Windows, 
+  for example, the learning process of new concepts always starts with popular projects that support, well, Windows, Linux, Android, Mac, 
+and on a lucky day - some support for an older version of iOS.</p>
+<p>My first interaction with fuzzing was no different, as I followed the introductory tutorials by Google, AFL, etc.</p>
+<p>Further search led me to <a href=https://github.com/ttdennis/fpicker>fpicker</a> by 
+  <a href="https://github.com/ttdennis">Dennis Heinze</a>
+   - a Frida based iOS fuzzing setup that utilizes AFL's proxy mode, and uses 
+Frida to send the input to the fuzzing target, and also to instrument the code coverage so that AFL can change the inputs accordingly.</p>
+<p>As many former managers told me: "no need to reinvent the wheel", I gave it a try, yet, encountered some issues:</p>
+<ul style="list-style-type: circle;  line-height: 2;">
+  <li>It hasn't been maintained in a while</li>
+  <li>I wanted to run on a physical device, yet encountered <a href="https://github.com/ttdennis/fpicker/blob/40bc9ec58f83a340b90253b04e03a0bfb71e4261/fpicker.c#L143">this</a> error message that 
+     <a href="https://github.com/ttdennis/fpicker/tree/40bc9ec58f83a340b90253b04e03a0bfb71e4261?tab=readme-ov-file#fuzzer-mode">AFL fuzzer mode</a> is not supported over USB and/or a remote device</li>
+  <li>Even if I managed to get it working, performance would likely remain slow over USB/LAN/Wifi</li>
+</ul>
+<p>And yet, as an experiment, I wanted to still make it work. I read the wonderful <a href="https://insinuator.net/2021/03/fpicker-fuzzing-with-frida/">fpicker blog post</a> 
+  by its author, and used the <a href="https://github.com/AFLplusplus/AFLplusplus/tree/16cc444ae576da9c8c7ef45f55984507b3cf6004/utils/afl_proxy"> afl++'s proxy example</a>, and created a small afl++ proxy inside in a container 
+  based on their official docker.</p>
+<p>This c proxy sent AFL's inputs via a socket to a Python script, which also initiated Frida, and hooked to the fuzzed function, 
+  and, using a similar Frida agent, created coverage info and passed it back to the socket of the c proxy, which reported the coverage to afl</p>
+<p>This worked well, but as expected, performance was slow (< 100 exec/sec), due to all the overheads</p>
+
+
+<h2 id="lldb">lldb to the rescue</h2>
+<p>Trying to list the performance factors, Frida over USB and the data conversions were the ones I could try to get rid of</p>
+<p>The fastest ways I know for executing code are C and ASM. Frida C module was indeed an option, yet I still had to convert buffers and have Python as a mediator</p>
+<p>LLDB ended up to be my choice, mainly because I know it pretty well, it can write ASM instructions, but most importantly: 
+it can run on a jailed device with any version, and it can detach while leaving all the memory changes it made in place</p>
+<p>After setting up everything, AFL showed ~350 exec/sec.</p>
+
+
+<h2 id="lldb">ASM Hooks</h2>
+<p>lldb could not malloc a buffer and run code on it, probably due to the W^X limitation. Yet, since I am writing the harness app I can setup executable regions (plain code)</p>
+<p>There might be more sophisticated ways of doing it, but I simply wrote a long function filled with code that isn't meant to run, yet it will be added to the binary</p>
+<p>Then, lldb can locate its symbol and set that up as if it was an executable regions playground that it can freely write code to</p>
+  <code>
+    - (void)myCodePlayground {
+    
+        NSString* playground = @"My Playground";
+        int i = 0x10;
+        
+        NSLog(@"%@ %d", playground, i);
+        i++;
+        NSLog(@"%@ %d", playground, i);
+        i++;
+        NSLog(@"%@ %d", playground, i);
+        i++;
+        // and so on...
+    }
+  </code>
+
+
+<p>The concept is that each end of a basic block gets its own destination space in the playground. </p>
+<p>LLDB reads the mnemonics between two addresses, and replaces the ones that mark the end of a
+ basic block with a B (branch) to the dedicated address</p>
+<p>The following diagram illustrates a <b>single</b> edge hook example:</p>
+<img src="../images/singleHook.png" alt="single_hook" style="max-width: 770px">
+<p>
+  Address 0xffc, marked <smallcode>1</smallcode>, ends the basic block with a condition mnemonic (CBZ).
+  The fuzzed function will either skip to address 1000 <smallcode>(2)</smallcode> or branch to <smallcode>3</smallcode> at 1100.
+  The Python script uses Keystone and Capstone to parse and replace the CBZ with a mnemonic that branches to the 
+  playground <smallcode>(4)</smallcode>.
+  Each mnemonic that ends a basic block is handled depending on it type. In this example, CBZ compares
+   some register to zero, and jumps or skips accordingly.
+  Replacing the CBZ mnemonic with a B to the playground, does not change the queried register, 
+  which allows the same mnemonic to be used in the playground.<br>
+  The address, on the other hand, needs to change for reporting the edge.<br>
+  Branching to 4000 invokes the playground hook, which starts with the condition, 
+  and either skips to the next instruction in the playground, or to another address the playground (for example 4020 at <smallcode>5</smallcode>).<br>
+  The Python script is also responsible for writing the instructions of each case inside the playground:<br>
+  In case the register was zero, CBZ will now jump to 4020 instead of 1100.
+   If the register was non zero, it will skip to 4004, instead of skipping from 0xffc to 0x1000.<br>
+   For now, let's assume that the reporting part contains a few opcodes (explained on the next section), 
+   and as they end, the code branches back to the block it should have jumped to without the playground hook. 
+   ie, if the register was zero branch back to 1100 and if not, to 1000.<br>
+</p>
+
+<h2 id="lldb">Reporting an edge</h2>
+<p>The code in each block of the playground is responsible for reporting the addresses of the original edge, 
+  and jump back to execute the next block. This code should also preserve the registers after it is done.<br>
+  To minimize the assembly code that needs to be written at each hook, the code simply calls an 
+  existing function in the iOS harness:</p>
+  <code>
+-(void)reportEdge:(void*)from to:(void*)to {
+      @autoreleasepool {
+          [map addObject:[NSArray arrayWithObjects:[NSNumber numberWithUnsignedLong:from], [NSNumber numberWithUnsignedLong:to], nil]];
+      }
+  }
+  </code>
+  <p>Yet again, lldb can find this symbol and use its address to call the function, 
+    which is performed on each playground block.</p>
+  <p>Calling the <smallcode>reportEdge</smallcode> function involves four registers:<br>
+  - X0 contains self (ie, the ViewController)<br>
+  - X1 contains the address of the report edge method<br>
+  - X2 contains the first parameter (the <i>from</i> address)<br>
+  - X3 contains the second parameter (the <i>to</i> address)<br>
+  </p>
+  <p>The playground block stores the previous values of x0-x3, uses these registers as per the list above, 
+    branch-links to the report function, restores the registers values, and jumps back to the original 
+    basic block verdict.</p>
+</p>
+
+<h2 id="lldb">Playground Final State</h2>
+<p>The script finishes writing all the hooks, and the playground ends up containing edge 
+  reporting blocks for each branching of the original call tree</p>
+<img src="../images/manyHooks.png" alt="many_hooks" style="max-width: 770px">
+
+
+<h3>Recap So Far</h3>
+<h4>In Logical Order</h4>
+<p>AFL++ runs in proxy mode, meaning it sends input to a small C program, and expects 
+  coverage information of each input.<br>
+  The C program sends these inputs via a socket to a local port.<br>
+  An iOS harness installed on the device using Xcode. This harness listens to the same port for receiving inputs.<br>
+  Upon setup, lldb-python scripts places hooks on the fuzzed function (that is pre-configured) which collect coverage data.<br>
+  Once the hooks are in place, lldb is detached from the process to prevent latency, yet the hooks remain.<br>
+  When the function exits the coverage data is sent back via the socket to the C harness, and back to AFL++ in the expected format</br>
+</p>
+<h4>In Chronological Order</h4>
+<p>While the previous paragraph makes sense logically, setting and running the fuzzer is done in different order.<br>
+  First thing, you select your fuzzed function and set its addresses. You should analyze the function statically 
+  to see that it matches <a href="https://llvm.org/docs/LibFuzzer.html#id23">fuzzing criteria</a>, and in addition, that the playground has enough space for the number of edges.<br>
+  A thumb rule for calculating the size can be found in the iOS harness comment above <smallcode>myCodePlayground</smallcode>.</br>
+The address and length are set at <smallcode>FAMainHelper.py</smallcode> in the lldb docker<br>
+Next step is installing the iOS harness on the device using Xcode. Once installed you don't need Xcode anymore, unless you need to debug something.<br>
+Next, run the iOS harness, which will start listening to the port.<br>
+Then, run the LLDB Docker container, which sets up ports, creates a tunnel to the device (assuming iOS 17+), finds the harness PID, start lldb server,
+ connects lldb client to the process, places the hooks, and confirms that the hooks were placed.<br>
+Now, continue running the app, detach the debugger, quit lldb, and exit the docker.<br>
+Finally, run the AFL++ docker, which sets up ports, compiles the C harness, creates random corpus, 
+and initiates the fuzzing (and its UI)</p>
+
+
+<h2 id="lldb">Trampoline</h2>
+<p>When using the playground to instrument a local function, it is safe to assume that the 
+  distance between the fuzzed function
+  and the playground is within 50Mb. When fuzzing system libraries, or third party libraries, 
+  the loader may place them further apart. In such case, branching from the end of the basic block to the playground
+  using a single opcode does not work.<br>
+  The previously explained concept, of replacing the split mnemonic with a single jumping instruction, is limited by arm64 
+  syntax, which allows <smallcode>b</smallcode> opcodes to jump ±128Mb away from the currect PC.<br>
+  Replacing, monitoring, and reconstructing more than one opcode per split could become complex, hence, another solution was implemented.<br>
+  A new zone, named Trampoline, will be defined by the user, and the hooks will branch to it before jumping again to the playground.
+  The zone must be executable, close enough to the fuzzing target, and out of the calling scope of the fuzzed function,
+   as we are about to re-write the instructions in that zone.<br>
+   <img src="../images/singleHookTrampoline.png" alt="trampoline_hook" style="max-width: 770px">
+   Consider the diagram above. The fuzzed function has a condition split <smallcode>1</smallcode> which may jump to result_a
+    <smallcode>2</smallcode>, or result_b <smallcode>3</smallcode>.<br>
+    The playground <smallcode>5</smallcode>, is too far away to branch to. Therefore, the condition opcode is replaced by
+     a jump to the trampoline zone <smallcode>4</smallcode>. The trampoline zone can then jump to an absolute address by using
+      multiple opcodes, since it no longer has a single opcode limitation. The address of the playground is stored in a temp 
+      register, and the trampoline jumps to the playground. The playground <smallcode>5</smallcode> is set with the 
+      original split condition from <smallcode>1</smallcode>.<br>
+      Now, let's assume the condition resolves to result_b. In this case the playground jumps to a relative address
+       <smallcode>6</smallcode>, which reports this edge, and then jumps back to the trampoline 
+       <smallcode>7</smallcode>, using absolute address, due to the distance. The trampoline can then restore the temp 
+       register value, and jump back to the place that the original split was soppused to reach <smallcode>3</smallcode>.
+</p>
+
+<h2 id="lldb">Networking</h2>
+<p><The setup contains several networking patterns worth getting to know, as many of the problems will likely 
+relate to the communication between the different components.<br>
+There are three main communication channels worth discussing. The first being the one I covered above the most, 
+which is the communication between the C proxy of AFL++ to the iOS harness that runs on the device.
+Since AFL and its proxy are inside a container, the socket they use is from the container to the host. This is done using the 
+"keyword" host.docker.internal, which routes the calls to the localhost of the host. The port from the container 
+to the host is set in the configuration file <smallcode>config.cfg</smallcode>.<br>
+The TCP packets from this host port are forwarded to another local port, also configured in the same file, 
+which is mapped using iProxy to the same port on the device.</p>
+<p>The second channel is the secure tunnel that Apple started requiring starting iOS 17 to start the debugserver on the device.<br>
+Creating this tunnel must be performed as sudo, which is why the <smallcode>./run_and_build_lldb_docker</smallcode> script 
+requires your root password. I certainly understand that users are not keen on providing the password to a tool downloaded from github,
+ and instead you can set up the tunnel yourself by copying the sudo line in the script and leave it out of the script. This way you can
+remove the sudo request from the script and run it under your user.</p>
+<p>The tunnel uses ipv6 and returns the information that lldb needs for attaching to the debugserver. If you end up changing this script,
+  just pass the result to the Python script that performs the connection.</p>
+<p>Lastly, using libmuxd is used for obtaining the PID of the iOS harness. While it is possible to use pymobiledevice3 for this task, 
+  I am using libmuxd since it is assumed it is already installed on the host (which is the case if iproxy is set up, as far as I recall.<br>
+libmuxd uses a unix socket on the host to communicate with the USB interface. This acts as a buffer path, 
+allowing read and write operations. The container is not aware of the physical USB interface of the host, and so, we use a host port to 
+ communicate between the host's unix socket to the container's unix socket. While it may be possible to do it using folder sharing, latency 
+ is irrelevant here because we are just writing the hooks and not running the fuzzer yet.
+ <h4>tools</h4>
+ <p>socat is used for doing the needed port forwarding.<br>
+ netcat is used for finding the pids of the previous run that may still occupy our configured ports and kills these processes
+ iproxy, libmuxd, pymobiledevice3 are used for the container-host-device communications and actions.</p>
+
+ <h2 id="lldb">Crashing</h2>
+ <p>AFL is sending multiple inputs per second, trying to cause the process to crash. However, 
+  the iOS harness should report this crash to AFL and ideally prevent the application from crashing so that 
+AFL will be able to log multiple crashes in a single run.</p>
+<p>The C harness is set up to count and save each crash, even if it is similar to a previous one.<br>
+When stopping the fuzzer with multiple crashes, expect many of them to have the buffer similarities.<br>
+It is possible to configure this in the C harness if you search for <smallcode>spoof_afl_coverage</smallcode><br>
+The results are saved on the outputs folder inside the AFL container. Make sure to either mount the folder 
+to a folder on your host or copy the results using <smallcode>docker cp</smallcode> before
+ exiting the container so you don't lose them.</p>
+
+
+ <h2 id="lldb">Getting Started</h2>
+<p>The best way is probably the readme file with all of the links it leads to. 
+  If you are new to AFL and/or fuzzing, there will be some learning curve.
+If you are new to dockers, it is worth learning about them too using online resources.
+If you are new to jailbreaks, iOS research, and reverse engineering, this project is probably 
+not for you yet, but please come back when it is!</p>
+
 </div>
 </body>
