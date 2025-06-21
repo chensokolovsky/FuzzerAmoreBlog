@@ -194,17 +194,15 @@ and initiates the fuzzing (and its UI)</p>
   The zone must be executable, close enough to the fuzzing target, and out of the calling scope of the fuzzed function,
    as we are about to re-write the instructions in that zone.<br>
    <img src="../images/singleHookTrampoline.png" alt="trampoline_hook" style="max-width: 770px">
-   Consider the diagram above. The fuzzed function has a condition split <smallcode>1</smallcode> which may jump to result_a
-    <smallcode>2</smallcode>, or result_b <smallcode>3</smallcode>.<br>
-    The playground <smallcode>5</smallcode>, is too far away to branch to. Therefore, the condition opcode is replaced by
-     a jump to the trampoline zone <smallcode>4</smallcode>. The trampoline zone can then jump to an absolute address by using
+   Consider the diagram above. The fuzzed function has a condition split<smallcode>(1)</smallcode>which may jump to result_a<smallcode>(2)</smallcode>, or result_b<smallcode>(3)</smallcode>.<br>
+    The playground<smallcode>(5)</smallcode>, is too far away to branch to. Therefore, the condition opcode is replaced by
+     a jump to the trampoline zone<smallcode>(4)</smallcode>. The trampoline zone can then jump to an absolute address by using
       multiple opcodes, since it no longer has a single opcode limitation. The address of the playground is stored in a temp 
-      register, and the trampoline jumps to the playground. The playground <smallcode>5</smallcode> is set with the 
-      original split condition from <smallcode>1</smallcode>.<br>
-      Now, let's assume the condition resolves to result_b. In this case the playground jumps to a relative address
-       <smallcode>6</smallcode>, which reports this edge, and then jumps back to the trampoline 
-       <smallcode>7</smallcode>, using absolute address, due to the distance. The trampoline can then restore the temp 
-       register value, and jump back to the place that the original split was soppused to reach <smallcode>3</smallcode>.
+      register, and the trampoline jumps to the playground. The playground<smallcode>(5)</smallcode>is set with the 
+      original split condition from<smallcode>(1)</smallcode>.<br>
+      Now, let's assume the condition resolves to result_b. In this case the playground jumps to a relative 
+      address<smallcode>(6)</smallcode>, which reports this edge, and then jumps back to the trampoline<smallcode>(7)</smallcode>, using absolute address, due to the distance. The trampoline can then restore the temp 
+       register value, and jump back to the place that the original split was soppused to reach<smallcode>(3)</smallcode>.
 </p>
 
 <h2 id="lldb">Networking</h2>
@@ -248,7 +246,7 @@ to a folder on your host or copy the results using <smallcode>docker cp</smallco
 
 
  <h2 id="lldb">Getting Started</h2>
-<p>The best way is probably the readme file with all of the links it leads to. 
+<p>The best way is probably the <a href="https://github.com/chensokolovsky/FuzzerAmore/blob/main/README.md">readme</a> file with all of the links it leads to. 
   If you are new to AFL and/or fuzzing, there will be some learning curve.
 If you are new to dockers, it is worth learning about them too using online resources.
 If you are new to jailbreaks, iOS research, and reverse engineering, this project is probably 

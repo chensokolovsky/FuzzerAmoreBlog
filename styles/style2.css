@@ -80,6 +80,7 @@ smallcode {
   border-radius: 2px;
   overflow-x: auto;
   text-align: left;
+  font-size: 1.3em;
 }
 
 pre {
