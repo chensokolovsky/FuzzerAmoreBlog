@@ -42,12 +42,12 @@ _|   \__,_| ___| ___| \___| _|        _/    _\ _|  _|  _| \___/  _|   \___|
 In this post I will cover a new <a href="https://github.com/chensokolovsky/AppleReflectionGenerator">tool</a> for generating reflection code for ObjC/Swift.<br />
 Reflection could be defined as a generic way to trigger methods by their name. If we want to get more technical, it means obtaining the address of the implementation of a method by its name.<br />
 While the concept is not unique to ObjC, this is the focus and purpose of this tool.<br />
-To be more percise: this blog explores the different ways reflection can be used for triggering ObjC methods.   
+To be more precise: this blog explores the different ways reflection can be used for triggering ObjC methods.   
 
-So, how may ways can there be to trigger just one objc function? apperantly, not as few as one would think, and it turns out that there are more permutations than ways to leave your lover.<br/>
+So, how many ways can there be to trigger just one ObjC function? Apparently, not as few as one would think, and it turns out that there are more permutations than ways to leave your lover.<br/>
 <br/>
-This blog post will introduce reflection basics, then move to advance breakdown and options, and will end with instructions on how to use the tool.
-If your are not new to ObjC reflection you can skip to the breakdown and read from there.<br/>
+This blog post will introduce reflection basics, then move to advanced breakdown and options, and will end with instructions on how to use the tool.
+If you are not new to ObjC reflection you can skip to the breakdown and read from there.<br/>
 Note that calling a method with reflection can be done using both ObjC and Swift. The callee, on the other hand, is always an ObjC method, or even an NSObject's child method.
 
 <br/>
@@ -57,12 +57,12 @@ Note that calling a method with reflection can be done using both ObjC and Swift
 <p></p>
 <b>Callee</b> - The ObjC method (function) that we want to call using reflection. For example, 
 a method like <smallcode>-(id)convertIntToNSNumber:(int)value;</smallcode><br/><br/>
-<b>Redlection</b> - The ability to find and call a method using a string that represents its name at runtime. In the example ablve, 
-We want to be able to call the method by providing the string <smallcode>"convertIntToNSNumber:"</smallcode> to our reflection code<br/><br/>
+<b>Reflection</b> - The ability to find and call a method using a string that represents its name at runtime. In the example above, 
+we want to be able to call the method by providing the string <smallcode>"convertIntToNSNumber:"</smallcode> to our reflection code<br/><br/>
 <b>Selector</b> - a struct (SEL) that represents the name of a method, which for our needs is equivalent to a string.<br/><br/>
-<b>Class Method</b> - A method that belongs to the class (a static method) that can be called without creating an instance of the class. The decleration
+<b>Class Method</b> - A method that belongs to the class (a static method) that can be called without creating an instance of the class. The declaration
 may look like this: <smallcode>+(id)myFunc;</smallcode> and triggering it directly like so: <smallcode>id result = [MyClass myFunc];</smallcode><br/><br/>
-<b>Instance Method</b> - A method that is called upon an instance of the class. The decleration may 
+<b>Instance Method</b> - A method that is called upon an instance of the class. The declaration may 
 look like this:  <smallcode>-(void)myFunc:(id)arg1;</smallcode> and triggering it directly like so: <smallcode>[myInstance myFunc:@"myParam"];</smallcode><br/><br/>
 <b>Target</b> - The object that the callee belongs to. It may be a class or an instance, depending on the case (class for class method and instance for instance method)<br/><br/>
 </p>
@@ -105,15 +105,15 @@ If we would have wanted to use a real string, this may fit better:
   If we look at this last example:<smallcode>[MyClass performSelector:NSSelectorFromString(@"myMethod")];</smallcode>we can split it to several parts.<br/><br/>
   
   The first part<smallcode>MyClass</smallcode>is the class we want to call (also known as the <b>target</b>). The target can be obtained directly or from a string as well.
-  There are different ways to obtain class, such as using<smallcode>NSClassFromString</smallcode>or<smallcode>objc_getClass</smallcode><br/><br/>
+  There are different ways to obtain a class, such as using<smallcode>NSClassFromString</smallcode>or<smallcode>objc_getClass</smallcode><br/><br/>
 
   The second part, which is at the end of the line, <b>creates the selector</b> from a string. There are more ways to create a selector, such as<smallcode>#selector</smallcode>in Swift, 
-  or<smallcode>sel_registerName</smallcode>, which returns a selector is such already exists.<br/><br/>
+  or<smallcode>sel_registerName</smallcode>, which returns a selector if one already exists.<br/><br/>
 
-  The final part in this simple example is the way we <b>trigger</b> the selector. Once the target and selector are obtains, there are several ways to trigger it. 
+  The final part in this simple example is the way we <b>trigger</b> the selector. Once the target and selector are obtained, there are several ways to trigger them. 
   In this example<smallcode>performSelector:</smallcode>is used, but other options also exist such as <smallcode>NSInvocation / IMP / objc_msgSend</smallcode>.<br/><br/>
 
-  Each method has some limitation and different availability depending on several parameters such as:<br/>
+  Each method has some limitations and different availabilities depending on several parameters such as:<br/>
   <p>
     - The language we are calling from (objc/swift)<br/>
     - The number of parameters the callee has<br/>
@@ -128,7 +128,7 @@ If we would have wanted to use a real string, this may fit better:
 <p>
   Obtaining the target for a class method can be done from a string. The <smallcode>NSClassFromString</smallcode> 
   accepts an<smallcode>NSString</smallcode>, and returns a<smallcode>Class</smallcode>.<br/>
-  Alternativly<smallcode>objc_getClass</smallcode>can be called with a C string which returns the same result.
+  Alternatively<smallcode>objc_getClass</smallcode>can be called with a C string which returns the same result.
   <code>
     Class myClass = NSClassFromString(@"MyClassName");
     // or
@@ -160,12 +160,12 @@ If we would have wanted to use a real string, this may fit better:
   </code>
     So if we apply the concepts that we learned so far, we know that there is more than one way
     for obtaining the class, and more than one way to obtain the selector.
-    so options A and B can both work, and even interchange the class/selector creation methods.
+    Options A and B can both work, and even interchange the class/selector creation methods.
     While both A and B use<smallcode>performSelector:</smallcode>you probably know by now that this 
     is just one of several ways to invoke a selector upon a target<br/>
 </p>
 <p>
-  Before advancing to triggering, return types and arguments considerations, 
+  Before advancing to triggering, return type and arguments considerations, 
   note that you can call these ObjC callees from Swift as well:
   <code>
   // consider the same callee
@@ -174,7 +174,7 @@ If we would have wanted to use a real string, this may fit better:
   // calling it from Swift code
   let myInstance = User()
   let mySelector = Selector("userUUID")
-  if let result = myInstance.perform(mySelector)?.takeUnretainedValue() as? NString {
+  if let result = myInstance.perform(mySelector)?.takeUnretainedValue() as? NSString {
     print("new user's uuid: \(result)")
   }
   </code>
@@ -187,9 +187,9 @@ If we would have wanted to use a real string, this may fit better:
 
   <br/><br/>
   We select the language as Swift, because we want to call the callee from Swift.<br/>
-  We select the instance method option because our calle start with a '-'.<br/>
+  We select the instance method option because our callee starts with a '-'.<br/>
   We select the<smallcode>Selector</smallcode>option for creating the selector. 
-  This option does not exist in objc.<br/>
+  This option does not exist in ObjC.<br/>
   We select the return value as<smallcode>NSObject</smallcode>, which is the base class of most NS* classes, including NSString<br/>
   We select number of parameters as none.<br/>
   We select the triggering method as<smallcode>perform</smallcode>, which is the Swift equivalent of<smallcode>performSelector</smallcode><br/>
@@ -201,7 +201,7 @@ If we would have wanted to use a real string, this may fit better:
   The middle part<smallcode>(2)</smallcode>contains code for testing or illustrating the 
   implementation which can be called using the generated code<smallcode>(3)</smallcode><br/>
   The middle part can also be copied to the relevant locations in the test app (fiftyWays)<br/>
-  The decleration will be added to the header file under the @interface, and the 
+  The declaration will be added to the header file under the @interface, and the 
   implementation in the .m file under the @implementation.<br/>
   The last part<smallcode>(3)</smallcode>contains the generated code that calls this method via reflection.<br/>
   In the test app this will be placed in the relevant caller, 
@@ -209,7 +209,7 @@ If we would have wanted to use a real string, this may fit better:
 </p>
 <p>
   To illustrate:<br/><br/>
-  <smallcode>decleration in the callee header file</smallcode><br/>
+  <smallcode>declaration in the callee header file</smallcode><br/>
   <image src="../images/50_example_1_header.png" alt="header_file" style="max-width: 770px;"></image>
   <br/><br/>
   <smallcode>implementation in the callee .m file</smallcode><br/>
@@ -226,8 +226,8 @@ If we would have wanted to use a real string, this may fit better:
 
 <h2 id="Advanced">Advanced</h2>
 <p>
-Creating a selector and calling <smallcode>performSelector</smallcode>is quite straight forward, 
-but what about more a more complex callee?<br/><br/>
+Creating a selector and calling <smallcode>performSelector</smallcode>is quite straightforward, 
+but what about a more complex callee?<br/><br/>
 
 <smallcode>performSelector</smallcode>comes with two variants:<br/>
 <code>
@@ -241,10 +241,10 @@ func perform(_ aSelector: Selector!) -> Unmanaged<AnyObject>!
 func perform(_ aSelector: Selector!, with object: Any!) -> Unmanaged<AnyObject>!
 func perform(_ aSelector: Selector!, with object1: Any!, with object2: Any!) -> Unmanaged<AnyObject>!
 </code><br/>
-These declerations are taken from the NSObject protocols (ObjC and Swift)<br/>
-This means you can call an objc method that has 2 arguments:<br/>
+These declarations are taken from the NSObject protocols (ObjC and Swift)<br/>
+This means you can call an ObjC method that has 2 arguments:<br/>
 <code>
-// method decleration
+// method declaration
 +(BOOL) methodNameWith:(id)firstArg and:(id)secondArg;
 
 // calling it from swift
@@ -262,7 +262,7 @@ SEL mySelector = NSSelectorFromString(@"methodNameWith:and:and:");
 
 IMP myImpl = [myClass methodForSelector:mySelector];
 int (*myFunc) (id, SEL, id, id, id) = (int (*) (id, SEL, id, id, id))myImpl;
-int result = myFunc(myClass, mySelector, @"myFirstArg", @"mySecongArg", @"myThirdArg");
+int result = myFunc(myClass, mySelector, @"myFirstArg", @"mySecondArg", @"myThirdArg");
 </code><br/><br/>
 Alternatively,<smallcode>NSInvocation</smallcode>can handle multiple arguments, invoke the method, and handle the return value.<br/>
 <code>
@@ -305,7 +305,7 @@ Note that<smallcode>IMP</smallcode>is accessible via Swift, yet the other two ar
 <p>
 To conclude the post, I encourage you to look for the relevant API in the header files.<br/>
 This can help you better understand how everything is declared and can be used in case the generator produces some errors.<br/>
-In some cases the header files needs to be imported to the project.
+In some cases the header files need to be imported to the project.
 Some examples:
 <br/><br/>
 <smallcode>Foundation/NSObjCRuntime.h</smallcode>
@@ -327,10 +327,10 @@ public func objc_getClass(_ name: UnsafePointer<CChar>) -> Any!
 </p>
 
 <h2 id="Conclusion">Conclusion</h2>
-Well, as we have seen, there are multiple ways to trigger objc functions with reflection.
-This can be done from objC or Swift, and depend on the callee's format.<br/>
-You may ask yourself why so we need so many ways if using just 2 can work just as well?<br/>
-This is very true, but still fun, educative and usefull if some of the APIs will change in the future.<br/>
+Well, as we have seen, there are multiple ways to trigger ObjC functions with reflection.
+This can be done from ObjC or Swift, and depends on the callee's format.<br/>
+You may ask yourself why do we need so many ways if using just 2 can work just as well?<br/>
+This is very true, but still fun, educational, and useful if some of the APIs will change in the future.<br/>
 <br/>
 <br/>
 Concluding with the links once again:<br/>
