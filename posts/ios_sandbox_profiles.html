@@ -33,29 +33,128 @@ _|   \__,_| ___| ___| \___| _|        _/    _\ _|  _|  _| \___/  _|   \___|
 
 
 <br>Oct 9, 2025<br>
-<h1 id="general">iOS 26 Sandblaster branch</h1>
-<img src="../images/cellebrite_sandblaster.png" alt="sandblaster" style="max-width: 770px">
+<h1 id="general">iOS 26 Sandblaster</h1>
+<img src="../images/sandblaster_26_github.png" alt="sandblaster" style="max-width: 770px">
 
 
-<h2 id="Introduction">Coming Soon</h2>
+<h2 id="Introduction">Introduction</h2>
 <p>Hello,<br />
-About to release a fork and a blog post of my latest research - iOS 26 Sandblaster.<br/>
-The project improves <a href="https://github.com/cellebrite-labs/sandblaster">Cellebrite's fork</a> 
+In this post I am sharing a fork of Sandblaster, compatible with iOS 26.<br/>
+The <a href=https://github.com/chensokolovsky/sandblaster_26/tree/ios26_support>fork (and branch)</a> 
+improves <a href="https://github.com/cellebrite-labs/sandblaster">Cellebrite's fork</a> 
 of (<a href="https://github.com/malus-security/sandblaster?tab=readme-ov-file">the original</a>) 
-Sandblaster which currently works for iOS 17, and partially on iOS 18.<br/>
-My new fork fully supports iOS versions 17, 18 and 26, for all 3 types:
+Sandblaster.
+Cellebrite's fork currently works for iOS 17, and partially on iOS 18.<br/>
+My new fork fully supports iOS versions 17, 18 and 26, for all 3 groups of profiles:
 <p>
     - Platform<br/>
     - Protobox<br/>
     - Collection<br/>
 </p>
-<br/>
-<br/>
+<h2 id="Usage">Usage</h2>
+<p>
+  Extracting the profiles requires some preperations, mainly extracting blobs of data from the sandbox kext.<br/>
+  More reading is available on the README of the repo and its links.<br/>
+  There are 3 groups of profiles: platform, protobox, and collection<br/>
+  For ios 18 and above, protobox may interchange with autobox, but the principal remains.<br/>
+  Using Sandblaster requires 4 files: 1 blob of data for each group, and a 4th file containing the list of operations.<br>
+  Once all files are obtained exctracting the profiles looks like this:<br/><br>
+  <code>
+$ python3 reverse-sandbox/reverse_sandbox.py -r 26 -o ../ios_26_operations.txt -d ../results_ios26/platform ../ios26/platform.bin
+  </code><br/>
+  Then repeating this for collection and protobox, while keeping the same operations.txt file for all 3 groups<br/>
 </p>
+<h2 id="Getting the kext">Getting the Kext</h2>
+<p>
+  This example uses the latest ios version as of today, 26.0.1<br/>
+  To get the needed blobs and operations list we need to obtain the sandbox kext.<br/>
+  We can use <smallcode>ipsw</smallcode> cli for this.<br/>
+  First, get the model and version you want from some of the available resources like <smallcode>ipsw.me</smallcode><br/>
+  In this case I selected <smallcode>iPhone18,1  23A355</smallcode><br/>
+  So download the kernel:<br/><br/>
+  <code>
+$ ipsw download ipsw -d "iPhone18,1" -b "23A355" --kernel
+  </code><br/>
+  and extract the sandbox<br/><br/>
+  <code>
+$ ipsw kernel extract 23A355__iPhone18,1/kernelcache.release.iPhone18,1 com.apple.security.sandbox
+  </code><br/>
+</p>
+<h2 id="Extracting The Files">Extracting The Files</h2>
+<p>
+  In this example I am using IDA pro, but Ghidra, hopper, binary ninja, can work as well.<br/>
+</p>
+<h4> Locating blobs offsets and sizes</h4>
+<p>
+  Opening the kext in IDA and searching for the string <smallcode>builtin collection</smallcode> should have one xref and place you inside a large function that is responsible for creating the profiles<br/>
+  The graph node should look similar to this:<br/><br/>
+  <img src="../images/graph_node_collection.png" alt="collection graph" style="max-width: 770px"><br/><br/>
+  w3 contains the size, x2 contains the data blob. The sub_ below w3 was renamed for convinience.<br/>
+  Write down the numbers for later <smallcode>collection: 0xFFFFFE00079C68F0 0xAE9A6</smallcode><br/>
+  There should be another xref to that same sub which contains the protobox(autobox) blob info:<br/><br/>
+  <img src="../images/graph_node_protobox.png" alt="protobox graph" style="max-width: 770px"><br/><br/>
+  The last blob should be located right next to the collection graph like so:<br/><br/>
+  <img src="../images/graph_node_platform.png" alt="platform graph" style="max-width: 770px"><br/><br/>
+  This time the registers are x8 and w9.<br>
+  Storing all 3 offsets and values we end up with this:<br/><br/>
+  <code>
+collection	0xFFFFFE00079C68F0	0xAE9A6
+protobox	0xFFFFFE0007A75860	0x101819
+platform	0xFFFFFE00079A4050	0x22891
+  </code><br/>
+</p>
+<h4> Dumping</h4>
+<p>
+  Now we need to dump those to files. Using IDA python in this case, but this can be done in many other ways<br/><br/>
+  <code>
+open("/Users/.../sandboxProfiles/ios26.0.1/collection.bin","wb").write(ida_bytes.get_bytes(0xFFFFFE00079C68F0, 0xAE9A6))
+open("/Users/.../sandboxProfiles/ios26.0.1/protobox.bin","wb").write(ida_bytes.get_bytes(0xFFFFFE0007A75860, 0x101819))
+open("/Users/.../ios26.0.1/platform.bin","wb").write(ida_bytes.get_bytes(0xFFFFFE00079A4050, 0x22891))
+  </code><br><br>
+  Each line can be pasted into the python console line at the bottom of IDA.<br/> 
+</p>
+<h4>Operations List</h4>
+<p>
+  Searching for the string <smallcode>default</smallcode> should land you at the top of a list of string similar to this:<br/><br/>
+    <img src="../images/graph_node_operations.png" alt="platform graph" style="max-width: 770px"><br/><br/>
+  After about 200 strings it will end most likely on <smallcode>xpc-message-send</smallcode><br/>
+  Dump this list and save it as a new-line-seperated text file like so:<br/>
+  <code>
+default
+appleevent-send
+authorization-right-obtain
+boot-arg-set
+consume-extension
+device*
+device-camera
+device-microphone
+etc...
+  </code><br/><br/>
+</p>
+<h4>Disclaimers</h4>
+<p>
+I am not working for cellebrite, I just forked their repo and made it ios 26 compatible.<br/>
+The patches I obtained were not a result of reverse engineering the functions, it mainly relies of the existing branch and changing offsets to prevent crashes.
+It may well be that some information is missing due to these skips, there is more work to do for verifying this.<br/>
+Tested on ios 17, 18, 26 beta 7, 26.0, 26.0.1<br/>
+Celebrite's fork contains additional functionality and script that automates the downloading and extraction process. I did not test that on ios 26<br/>
+</p>
+<h4>Credits</h4>
+<p>
+Most of the work here is based on the mentioned projects and forks, and my work is minor. I will try to list them all:<br/>
+- The original <a href="https://github.com/malus-security/sandblaster">Sandblaster</a><br/>
+- Cellebrite Labs's <a href="https://github.com/cellebrite-labs/sandblaster">fork</a><br/>
+- <a href="https://tfp0labs.com/blog/sandblaster-missing-readme">The missing readme</a> by ftp0labs<br/>
+- <a herf="https://census-labs.com/media/sandbox-argp-csw2019-public.pdf">Slides</a> from census labs<br/>
+- 8ksec <a href="https://8ksec.io/reading-ios-sandbox-profiles/?srsltid=AfmBOooPVdlo1TZPP9Ca-5tLr0pQ2agnQ3Ko81NjBlxoqkOJTme9fd9u
+">blog</a> and <a href="https://academy.8ksec.io/course/offensive-ios-internals">online course</a><br/>
+- <a href="https://youtu.be/wMJy30_ZbSs?si=jc3tl8yhwOLnop08">Video</a> by Jonathan Levin<br/>
+</p>
+
+
 <h2 id="Teaser">From ios 26 beta 7</h2>
 <p>
 <img src="../images/ios_26_platform.png" alt="platform" style="max-width: 770px">
 <img src="../images/ios_26_protobox.png" alt="protobox" style="max-width: 770px">
 <img src="../images/ios_26_collection.png" alt="collection" style="max-width: 770px">
 </p>
-Disclaimer: I am not working for cellebrite, I just forked their repo and made it ios 26 compatible
